@@ -44,21 +44,5 @@ func main() {
             filename := input["filename"]
             content := input["content"]
             user.AppendToFile(filename, []byte(content))
-        case "CreatInvitation":
-            user, _ := client.GetUser(username, password)
-            filename := input["filename"]
-            recipientName := input["recipient_name"]
-            user.CreateInvitation(filename, recipientName)
-        case "AcceptInvitation":
-            user, _ := client.GetUser(username, password)
-            senderName := input["sender_name"]
-            invitationUUID := input["invitation_uuid"]
-            filename := input["filename"]
-            user.AcceptInvitation(senderName, invitationUUID, filename)
-        case "RevokeAccess":
-            user, _ := client.GetUser(username, password)
-            filename := input["filename"]
-            recipientName := input["recipient_name"]
-            user.RevokeAccess(filename, recipientName)
     }
 }
