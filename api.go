@@ -17,6 +17,18 @@ func getUser(username string, password string) (*client.User) {
     return user
 }
 
+func storeFile(user *client.User, filename string, content []byte) {
+    user.StoreFile(filename, content)
+}
+
+func loadFile(user *client.User, filename string) {
+    user.LoadFile(filename)
+}
+
+func appendFile(user *client.User, filename string, content []byte) {
+    user.AppendToFile(filename, content)
+}
+
 func main() {
     // Read input commands from a json file
     jsonFile, err := os.Open("input.json")
@@ -40,18 +52,10 @@ func main() {
         case "GetUser":
             getUser(username, password)
         case "StoreFile":
-            user, _ := client.GetUser(username, password)
-            filename := input["filename"]
-            content := input["content"]
-            user.StoreFile(filename, []byte(content))
+            storeFile(getUser(username, password), input["filename"], []byte(input["content"]))
         case "LoadFile":
-            user, _ := client.GetUser(username, password)
-            filename := input["filename"]
-            user.LoadFile(filename)
+            loadFile(getUser(username, password), input["filename"])
         case "AppendFile":
-            user, _ := client.GetUser(username, password)
-            filename := input["filename"]
-            content := input["content"]
-            user.AppendToFile(filename, []byte(content))
+            appendFile(getUser(username, password), input["filename"], []byte(input["content"]))
     }
 }
