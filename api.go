@@ -8,6 +8,15 @@ import (
     "github.com/cs161-staff/project2-starter-code/client"
 )
 
+func initUser(username string, password string) {
+    client.InitUser(username, password)
+}
+
+func getUser(username string, password string) (*client.User) {
+    user, _ := client.GetUser(username, password)
+    return user
+}
+
 func main() {
     // Read input commands from a json file
     jsonFile, err := os.Open("input.json")
@@ -27,9 +36,9 @@ func main() {
     fmt.Println(command)
     switch command {
         case "InitUser":
-            client.InitUser(username, password)
+            initUser(username, password)
         case "GetUser":
-            client.GetUser(username, password)
+            getUser(username, password)
         case "StoreFile":
             user, _ := client.GetUser(username, password)
             filename := input["filename"]
