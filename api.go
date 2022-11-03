@@ -1,65 +1,61 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"os"
-
-	"github.com/cs161-staff/project2-starter-code/client"
+    "encoding/json"
+    "fmt"
+    "io/ioutil"
+    "os"
+    "github.com/cs161-staff/project2-starter-code/client"
 )
 
-func main() {
-	// Read input commands from a json file
-	jsonFile, err := os.Open("input.json")
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println("Successfully Opened json file")
-	defer jsonFile.Close()
-	byteValue, _ := ioutil.ReadAll(jsonFile)
-	var input map[string]string
-	json.Unmarshal([]byte(byteValue), &input)
-	command := input["command"]
-	username := input["username"]
-	password := input["password"]
+func initUser(username string, password string) {
+    client.InitUser(username, password)
+}
 
-	// Parse command and call client functions
-	fmt.Println(command)
-	switch command {
-	case "InitUser":
-		client.InitUser(username, password)
-	case "GetUser":
-		client.GetUser(username, password)
-	case "StoreFile":
-		user, _ := client.GetUser(username, password)
-		filename := input["filename"]
-		content := input["content"]
-		user.StoreFile(filename, []byte(content))
-	case "LoadFile":
-		user, _ := client.GetUser(username, password)
-		filename := input["filename"]
-		user.LoadFile(filename)
-	case "AppendFile":
-		user, _ := client.GetUser(username, password)
-		filename := input["filename"]
-		content := input["content"]
-		user.AppendToFile(filename, []byte(content))
-	case "CreatInvitation":
-		user, _ := client.GetUser(username, password)
-		filename := input["filename"]
-		recipientName := input["recipient_name"]
-		user.CreateInvitation(filename, recipientName)
-	case "AcceptInvitation":
-		user, _ := client.GetUser(username, password)
-		senderName := input["sender_name"]
-		invitationUUID := input["invitation_uuid"]
-		filename := input["filename"]
-		user.AcceptInvitation(senderName, invitationUUID, filename)
-	case "RevokeAccess":
-		user, _ := client.GetUser(username, password)
-		filename := input["filename"]
-		recipientName := input["recipient_name"]
-		user.RevokeAccess(filename, recipientName)
-	}
+func getUser(username string, password string) (*client.User) {
+    user, _ := client.GetUser(username, password)
+    return user
+}
+
+func storeFile(user *client.User, filename string, content []byte) {
+    user.StoreFile(filename, content)
+}
+
+func loadFile(user *client.User, filename string) {
+    user.LoadFile(filename)
+}
+
+func appendFile(user *client.User, filename string, content []byte) {
+    user.AppendToFile(filename, content)
+}
+
+func main() {
+    // Read input commands from a json file
+    jsonFile, err := os.Open("input.json")
+    if err != nil {
+        fmt.Println(err)
+    }
+    fmt.Println("Successfully Opened json file")
+    defer jsonFile.Close()
+    byteValue, _ := ioutil.ReadAll(jsonFile)
+    var input map[string]string
+    json.Unmarshal([]byte(byteValue), &input)
+    command := input["command"]
+    username := input["username"]
+    password := input["password"]
+
+    // Parse command and call client functions
+    fmt.Println(command)
+    switch command {
+        case "InitUser":
+            initUser(username, password)
+        case "GetUser":
+            getUser(username, password)
+        case "StoreFile":
+            storeFile(getUser(username, password), input["filename"], []byte(input["content"]))
+        case "LoadFile":
+            loadFile(getUser(username, password), input["filename"])
+        case "AppendFile":
+            appendFile(getUser(username, password), input["filename"], []byte(input["content"]))
+    }
 }
