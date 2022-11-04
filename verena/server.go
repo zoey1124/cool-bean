@@ -9,6 +9,18 @@ import (
 	"github.com/cs161-staff/project2-starter-code/client"
 )
 
+type Input struct {
+	Command  string `json:"command"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Filename string `json:"filename"`
+	Content  string `json:"content"`
+}
+
+type Inputs struct {
+	Inputs []Input `json:"inputs"`
+}
+
 func initUser(username string, password string) {
 	client.InitUser(username, password)
 }
@@ -47,24 +59,28 @@ func main() {
 	fmt.Println("Successfully Opened json file")
 	defer jsonFile.Close()
 	byteValue, _ := ioutil.ReadAll(jsonFile)
-	var input map[string]string
-	json.Unmarshal([]byte(byteValue), &input)
-	command := input["command"]
-	username := input["username"]
-	password := input["password"]
+	var inputs Inputs
+	json.Unmarshal([]byte(byteValue), &inputs)
 
-	// Parse command and call client functions
-	fmt.Println(command)
-	switch command {
-	case "InitUser":
-		initUser(username, password)
-	case "GetUser":
-		getUser(username, password)
-	case "StoreFile":
-		storeFile(getUser(username, password), input["filename"], []byte(input["content"]))
-	case "LoadFile":
-		loadFile(getUser(username, password), input["filename"])
-	case "AppendFile":
-		appendFile(getUser(username, password), input["filename"], []byte(input["content"]))
+	for i := 0; i < len(inputs.Inputs); i++ {
+		input := inputs.Inputs[i]
+		command := input.Command
+		username := input.Username
+		password := input.Password
+
+		// Parse command and call client functions
+		fmt.Println(command)
+		switch command {
+		case "InitUser":
+			initUser(username, password)
+		case "GetUser":
+			getUser(username, password)
+		case "StoreFile":
+			storeFile(getUser(username, password), input.Filename, []byte(input.Content))
+		case "LoadFile":
+			loadFile(getUser(username, password), input.Filename)
+		case "AppendFile":
+			appendFile(getUser(username, password), input.Filename, []byte(input.Content))
+		}
 	}
 }
