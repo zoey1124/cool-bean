@@ -7,7 +7,6 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/cbergoon/merkletree"
 	mt "github.com/cbergoon/merkletree"
 )
 
@@ -38,18 +37,22 @@ func (t Content) Equals(other mt.Content) (bool, error) {
 /*=====================================================================================*/
 
 /*====================== Merkle Tree Functions for Clients =============================*/
-func verifyFresh() {
+func verifyFresh(roothash []byte, content Content, siblingNodes []mt.Node) (bool, error) {
 	// Takes a path and a hashroot as input
 	// Return True if node + path => hashroot, False otherwise
+	return true, nil
 }
 
 /*=====================================================================================*/
+/*====================== Merkle Tree Functions for Server =============================*/
+
+// Use getMerklePath from library
 
 func main() {
 	var list []mt.Content
 	list = append(list, Content{x: []byte("A")})
 	log.Println(list)
-	t, err := merkletree.NewTree(list)
+	t, err := mt.NewTree(list)
 	if err != nil {
 		log.Fatal(err)
 	}

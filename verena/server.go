@@ -1,36 +1,13 @@
 package main
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
 
-	"github.com/cbergoon/merkletree"
 	"github.com/cs161-staff/project2-starter-code/client"
 )
-
-/*=================== Merkle Tree: Implement the Content Interface ===================*/
-
-type Content struct {
-	x string
-}
-
-func (t Content) CalculateHash() ([]byte, error) {
-	h := sha256.New()
-	if _, err := h.Write([]byte(t.x)); err != nil {
-		return nil, err
-	}
-
-	return h.Sum(nil), nil
-}
-
-func (t Content) Equals(other merkletree.Content) (bool, error) {
-	return t.x == other.(Content).x, nil
-}
-
-/*=====================================================================================*/
 
 type Input struct {
 	Command  string `json:"command"`
