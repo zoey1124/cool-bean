@@ -4,12 +4,20 @@ import json
 USERNAME = "Alice"
 PASSWORD = "12345"
 
-if __name__ == "__main__":
-    command = {
+def create_command(command_name):
+    return {
         "username": USERNAME,
         "password": PASSWORD,
-        "command": "InitUser"
+        "command": command_name
+    }
+
+if __name__ == "__main__":
+    client_input = {
+        "inputs": [
+            create_command("InitUser"),
+            create_command("GetUser")
+        ]
     }
     with open("input.json", "w") as f:
-        f.write(json.dumps(command))
-    os.system("go run ../api.go")
+        f.write(json.dumps(client_input))
+    os.system("go run server.go input.json")
