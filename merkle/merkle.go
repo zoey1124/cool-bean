@@ -4,7 +4,7 @@ package main
 
 import (
 	"crypto/sha256"
-	"log"
+	"fmt"
 	"reflect"
 
 	mt "github.com/cbergoon/merkletree"
@@ -12,13 +12,13 @@ import (
 
 /*=================== Merkle Tree: Implement the Content Interface ===================*/
 type Content struct {
-	x []byte // encrypted updated content
+	content []byte // content = Encrypted(Compressed(plaintext))
 }
 
 // CalculateHash hashes the values of a Content
 func (t Content) CalculateHash() ([]byte, error) {
 	h := sha256.New()
-	if _, err := h.Write(t.x); err != nil {
+	if _, err := h.Write(t.content); err != nil {
 		return nil, err
 	}
 
@@ -31,42 +31,56 @@ func (t Content) Equals(other mt.Content) (bool, error) {
 	//     1. Both slices are nil or non-nil
 	// 	   2. Both slice have the same length
 	// 	   3. Corresponding slots have the same value
-	return reflect.DeepEqual(t.x, other.(Content).x), nil
+	return reflect.DeepEqual(t.content, other.(Content).content), nil
 }
 
 /*=====================================================================================*/
 
 /*====================== Merkle Tree Functions for Clients =============================*/
-func verifyFresh(roothash []byte, content Content, siblingNodes []mt.Node) (bool, error) {
-	// Takes a path and a hashroot as input
-	// Return True if node + path => hashroot, False otherwise
-	return true, nil
+// plaintext -> encryption -> Content object
+func CovertToContent(plaintext []byte) (Content, error) {
+	// enceyption need the secret keys...
+	return Content{}, nil
+}
+
+// recalculate roothash using given merkle path, return true if match with given roothash
+func VerifyFresh(roothash []byte, content Content, sibling_hashes [][]byte) (bool, error) {
+	curr_hash, _ := content.CalculateHash()
+	for _, sibling_hash := range sibling_hashes {
+		h := sha256.New()
+		h.Write(append(curr_hash, sibling_hash...))
+		curr_hash = h.Sum(nil)
+	}
+	return reflect.DeepEqual(curr_hash, roothash), nil
 }
 
 /*=====================================================================================*/
+
 /*====================== Merkle Tree Functions for Server =============================*/
 
 // Use getMerklePath from library
 
 func main() {
-	var list []mt.Content
-	list = append(list, Content{x: []byte("A")})
-	log.Println(list)
-	t, err := mt.NewTree(list)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Get the Merkle root of the tree
-	mr := t.MerkleRoot()
-	log.Println("\n", mr)
+	A := Content{content: []byte("A")}
+	B := Content{content: []byte("B")}
+	C := Content{content: []byte("C")}
+	D := Content{content: []byte("D")}
+	content_list := []mt.Content{A, B, C, D}
+	tree, _ := mt.NewTree(content_list)
+	hashroot := tree.MerkleRoot()
+	fmt.Println("Hashroot is", hashroot)
+	merkle_path, indexes, _ := tree.GetMerklePath(A)
+	fmt.Println("merkle path is ", merkle_path)
+	fmt.Println("indexes are", indexes)
 
-	// try how to add one more element and update the merkle tree and hashroot?
-	list = append(list, Content{x: []byte("B")})
-	err = t.RebuildTreeWith(list)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Get the Merkle root of the tree
-	mr = t.MerkleRoot()
-	log.Println("\n", mr)
+	// hash value of content B
+	b_hash, _ := B.CalculateHash()
+	fmt.Println("B hash is ", b_hash)
+
+	// try to hash(b_hash, b_hash)
+	h := sha256.New()
+	c_hash, _ := C.CalculateHash()
+	d_hash, _ := D.CalculateHash()
+	h.Write(append(c_hash, d_hash...))
+	fmt.Println(h.Sum(nil))
 }
