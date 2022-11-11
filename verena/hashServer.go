@@ -10,38 +10,31 @@ import (
     "fmt"
     "encoding/json"
     "net/http"
-    // "strconv"
 )
 
 var m = make(map[string]string)
 
-func get(w http.ResponseWriter, req *http.Request) {
+func parseRequestToJson(req *http.Request) map[string]string {
     decoder := json.NewDecoder(req.Body)
     var jsonData map[string]string
     err := decoder.Decode(&jsonData)
     if err != nil {
         panic(err)
     }
+    return jsonData
+}
+
+func get(w http.ResponseWriter, req *http.Request) {
+    jsonData := parseRequestToJson(req)
     uuid := jsonData["uuid"]
 
     fmt.Fprintf(w, uuid + " " + m[uuid] + "\n")
 }
 
 func put(w http.ResponseWriter, req *http.Request) {
-    decoder := json.NewDecoder(req.Body)
-    var jsonData map[string]string
-    err := decoder.Decode(&jsonData)
-    if err != nil {
-        panic(err)
-    }
+    jsonData := parseRequestToJson(req)
     uuid := jsonData["uuid"]
     value := jsonData["hash"]
-    // i, err := strconv.Atoi(value)
-    // if err != nil {
-    //     panic(err)
-    // }
-    // fmt.Println(uuid)
-    // fmt.Println(i)
 
     m[uuid] = value
     fmt.Fprintf(w, value + "put\n")
