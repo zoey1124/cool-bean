@@ -33,6 +33,17 @@ def test_hash_server():
     r = requests.get("http://localhost:8090/get", json={"uuid": "1"})
     print(r.text)
 
+    r = requests.post(
+        "http://localhost:8090/put",
+        json={
+            "uuid": "2",
+            "entry":{"hash":"c", "version":1, "publicKey":"Alice"}
+        })
+    print(r.text)
+
+    r = requests.get("http://localhost:8090/get", json={"uuid": "2"})
+    print(r.text)
+
 if __name__ == "__main__":
     client_input = {
         "inputs": [
