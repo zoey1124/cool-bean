@@ -1,10 +1,15 @@
-package main
+/*
+Merkle Tree related library.
+Util functions influde:
+    - GetUUID(username, filename) => UUID
+	- VerifyFresh
+	-
+*/
 
-// playground for merkle for now, change to package later
+package main
 
 import (
 	"crypto/sha256"
-	"fmt"
 	"reflect"
 
 	mt "github.com/cbergoon/merkletree"
@@ -28,7 +33,7 @@ func ByteLengthNormalize(byteArr []byte, k int) []byte {
 	return byteArr
 }
 
-func getUUID(username string, filename string) userlib.UUID {
+func GetUUID(username string, filename string) userlib.UUID {
 	/*
 		Return UUID(H(username||filename))
 	*/
@@ -79,33 +84,14 @@ func VerifyFresh(roothash []byte, content Content, sibling_hashes [][]byte) (boo
 	return reflect.DeepEqual(curr_hash, roothash), nil
 }
 
-/*=====================================================================================*/
-
-/*====================== Merkle Tree Functions for Server =============================*/
-
-// Use getMerklePath from library
-
-func main() {
-	A := Content{content: []byte("A")}
-	B := Content{content: []byte("B")}
-	C := Content{content: []byte("C")}
-	D := Content{content: []byte("D")}
-	content_list := []mt.Content{A, B, C, D}
-	tree, _ := mt.NewTree(content_list)
+func GetMerkleRoot(UUID userlib.UUID) []byte {
+	tree_byte, _ := userlib.DatastoreGet(UUID)
+	var tree mt.MerkleTree
+	userlib.Unmarshal(tree_byte, &tree)
 	hashroot := tree.MerkleRoot()
-	fmt.Println("Hashroot is", hashroot)
-	merkle_path, indexes, _ := tree.GetMerklePath(A)
-	fmt.Println("merkle path is ", merkle_path)
-	fmt.Println("indexes are", indexes)
+	return hashroot
+}
 
-	// hash value of content B
-	b_hash, _ := B.CalculateHash()
-	fmt.Println("B hash is ", b_hash)
-
-	// try to hash(b_hash, b_hash)
-	h := sha256.New()
-	c_hash, _ := C.CalculateHash()
-	d_hash, _ := D.CalculateHash()
-	h.Write(append(c_hash, d_hash...))
-	fmt.Println(h.Sum(nil))
+func GetMerklePath() ([][]byte, error) {
+	return nil, nil
 }
