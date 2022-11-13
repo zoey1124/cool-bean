@@ -21,7 +21,13 @@ def test_hash_server():
     r = requests.get("http://localhost:8090/get", json={"uuid": "1"})
     print(r.text)
 
-    r = requests.post("http://localhost:8090/put", json={"uuid": "1", "entry":{"hash":"a", "version":0, "publicKey":"Alice"}})
+    r = requests.post(
+        "http://localhost:8090/put",
+        json={
+            "uuid": "1",
+            "entry":{"hash":"a", "version":2, "publicKey":"Alice"},
+            "oldEntry":{"hash":"b", "version":1, "publicKey":"Alice"},
+        })
     print(r.text)
 
     r = requests.get("http://localhost:8090/get", json={"uuid": "1"})
