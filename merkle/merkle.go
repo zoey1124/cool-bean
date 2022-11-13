@@ -8,7 +8,35 @@ import (
 	"reflect"
 
 	mt "github.com/cbergoon/merkletree"
+	userlib "github.com/cs161-staff/project2-userlib"
 )
+
+/*================================= Util Functions ==================================*/
+func ByteLengthNormalize(byteArr []byte, k int) []byte {
+	/*
+			Return a []byte with length. If input []byte len > k, trim the byte array
+		    If input []byte length < k, padding with 0
+	*/
+	if len(byteArr) >= k {
+		return byteArr[:k]
+	}
+	// Padding array with zero to length of k
+	n := len(byteArr)
+	for i := 0; i < (k - n); i++ {
+		byteArr = append(byteArr, 0)
+	}
+	return byteArr
+}
+
+func getUUID(username string, filename string) userlib.UUID {
+	/*
+		Return UUID(H(username||filename))
+	*/
+	username_byte := ByteLengthNormalize([]byte(username), 16)
+	filename_byte := ByteLengthNormalize([]byte(filename), 16)
+	UUID, _ := userlib.UUIDFromBytes(userlib.Hash(append(username_byte, filename_byte...)))
+	return UUID
+}
 
 /*=================== Merkle Tree: Implement the Content Interface ===================*/
 type Content struct {
@@ -37,14 +65,11 @@ func (t Content) Equals(other mt.Content) (bool, error) {
 /*=====================================================================================*/
 
 /*====================== Merkle Tree Functions for Clients =============================*/
-// plaintext -> encryption -> Content object
-func CovertToContent(plaintext []byte) (Content, error) {
-	// enceyption need the secret keys...
-	return Content{}, nil
-}
 
-// recalculate roothash using given merkle path, return true if match with given roothash
 func VerifyFresh(roothash []byte, content Content, sibling_hashes [][]byte) (bool, error) {
+	/*
+		Recalculate roothash using given merkle path, return true if match with given roothash
+	*/
 	curr_hash, _ := content.CalculateHash()
 	for _, sibling_hash := range sibling_hashes {
 		h := sha256.New()
