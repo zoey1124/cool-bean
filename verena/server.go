@@ -20,6 +20,9 @@ import (
 	userlib "github.com/cs161-staff/project2-userlib"
 )
 
+var datastore map[userlib.UUID]FileObject = make(map[userlib.UUID]FileObject)
+var DataStore = datastore
+
 /*================================= Util Functions ==================================*/
 func ByteLengthNormalize(byteArr []byte, k int) []byte {
 	/*
@@ -37,14 +40,17 @@ func ByteLengthNormalize(byteArr []byte, k int) []byte {
 	return byteArr
 }
 
-func GetUUID(username string, filename string) userlib.UUID {
+func GetUUID(username string, filename string) (userlib.UUID, error) {
 	/*
 		Return UUID(H(username||filename))
 	*/
 	username_byte := ByteLengthNormalize([]byte(username), 16)
 	filename_byte := ByteLengthNormalize([]byte(filename), 16)
-	UUID, _ := userlib.UUIDFromBytes(userlib.Hash(append(username_byte, filename_byte...)))
-	return UUID
+	UUID, err := userlib.UUIDFromBytes(userlib.Hash(append(username_byte, filename_byte...)))
+	if err != nil {
+		return userlib.UUIDNew(), err
+	}
+	return UUID, nil
 }
 
 /*=================== Merkle Tree: Implement the Content Interface ===================*/
@@ -81,7 +87,7 @@ type LoadFileRequest struct {
 
 type FileObject struct {
 	Content    string
-	MerkleTree mt.MerkleTree
+	MerkleTree *mt.MerkleTree
 }
 
 func initUser(username string, password string) {
@@ -104,22 +110,27 @@ func loadFile(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	hashroot, file_content := _loadFile(jsonData.Username, jsonData.Filename)
+	hashroot, file_content, err := _loadFile(jsonData.Username, jsonData.Filename)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Fprintf(w, "get succedded for hashroot:"+string(hashroot)+"file content:"+file_content)
+	fmt.Println("Success")
 }
 
-func _loadFile(username string, filename string) ([]byte, string) {
+func _loadFile(username string, filename string) ([]byte, string, error) {
 	// Return: hashroot, file_content
 	// 1. get UUID from username and filename
-	UUID := GetUUID(username, filename)
-
+	UUID, err := GetUUID(username, filename)
+	if err != nil {
+		return nil, "", err
+	}
 	// 2. get hashroot and content
-	value, _ := userlib.DatastoreGet(UUID)
 	var fileObject FileObject
-	userlib.Unmarshal(value, &fileObject)
-	hashroot := fileObject.MerkleTree.Root.Hash
+	fileObject = datastore[UUID]
+	hashroot := fileObject.MerkleTree.MerkleRoot()
 	content := fileObject.Content
-	return hashroot, content
+	return hashroot, content, nil
 }
 
 func appendFile(user *client.User, filename string, content []byte) {
@@ -128,19 +139,16 @@ func appendFile(user *client.User, filename string, content []byte) {
 
 func main() {
 	// test case
-	// 1. Generate UUID
-	UUID := GetUUID("Alice", "somefile")
-	// 2. Generate content
-	c := "This is the content of a file"
-	// 3. Generate a Merkle Tree
+	UUID, _ := GetUUID("Alice", "somefile")
+	someFileContent := []byte("some file content")
+	// Generate a Merkle Tree
 	var list []mt.Content
-	list = append(list, Content{content: []byte(c)})
-	merkleTree, _ := mt.NewTree(list)
-	// 4. Generate a FileObject
-	FileObject := FileObject{Content: c, MerkleTree: *merkleTree}
-	// 5. Put UUID -> FileObject in DataStore
-	value, _ := userlib.Marshal(FileObject)
-	userlib.DatastoreSet(UUID, value)
+	list = append(list, Content{content: someFileContent})
+	someMerkleTree, _ := mt.NewTree(list)
+	// Generate a FileObject
+	fileObject := FileObject{Content: string(someFileContent), MerkleTree: someMerkleTree}
+	// Put UUID -> FileObject in DataStore
+	DataStore[UUID] = fileObject
 	// `curl -X POST localhost:8090/loadFile -H 'Content-Type: application/json' -d '{"username":"Alice", "password":"12345", "filename":"somefile"}'`
 
 	http.HandleFunc("/loadFile", loadFile)
