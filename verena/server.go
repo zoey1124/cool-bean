@@ -99,7 +99,7 @@ type StoreFileRequest struct {
 type FileObject struct {
 	Content    string
 	MerkleTree *mt.MerkleTree
-	Versions   []Content
+	Versions   []mt.Content
 }
 
 type Entry struct {
@@ -158,11 +158,19 @@ func _storeFile(username string, filename string, content string) ([]byte, [][]b
 	versions := fileObject.Versions
 	new_content := Content{content: []byte(content)}
 	versions = append(versions, new_content)
-	// fileObject.MerkleTree.RebuildTreeWith(versions)
+	err := fileObject.MerkleTree.RebuildTreeWith(versions)
+	if err != nil {
+		return nil, nil, errors.New("Can't rebuild merkle tree with new content")
+	}
 	fileObject.Versions = versions
 	fileObject.Content = content
 
-	return nil, nil, nil
+	roothash := fileObject.MerkleTree.MerkleRoot()
+	merklePath, _, err := fileObject.MerkleTree.GetMerklePath(new_content)
+	if err != nil {
+		return nil, nil, errors.New("Can't get new merkle path")
+	}
+	return roothash, merklePath, nil
 }
 
 func writeHash(UUID userlib.UUID, entry Entry, oldEntry Entry) {
