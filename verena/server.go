@@ -89,6 +89,13 @@ type LoadFileRequest struct {
 	Filename string `json:"filename"`
 }
 
+type StoreFileRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Filename string `json:"filename"`
+	Content  string `json:"content"`
+}
+
 type FileObject struct {
 	Content    string
 	MerkleTree *mt.MerkleTree
@@ -118,13 +125,34 @@ func getUser(username string, password string) *client.User {
 	return user
 }
 
-func _storeFile(username string, filename string, content string) error {
+func storeFile(w http.ResponseWriter, req *http.Request) {
+	var jsonData StoreFileRequest
+	err := json.NewDecoder(req.Body).Decode(&jsonData)
+	if err != nil {
+		panic(err)
+	}
+	hashroot, merklePath, err := _storeFile(jsonData.Username, jsonData.Filename, jsonData.Content)
+	if err != nil {
+		panic(err)
+	}
+	merklePathString := ""
+	for _, h := range merklePath {
+		merklePathString += string(h[:]) + " "
+	}
+	fmt.Fprintf(w, string(hashroot[:])+"\n"+merklePathString)
+	fmt.Println("Success")
+}
+
+func _storeFile(username string, filename string, content string) ([]byte, [][]byte, error) {
+	/*
+		Return new root hash and sibling node hashes
+	*/
 	// Get UUID
 	UUID, _ := GetUUID(username, filename)
 	// Get content and merkle tree
 	fileObject, ok := DataStore[UUID]
 	if !ok {
-		return errors.New(strings.ToTitle("UUID not in DataStore"))
+		return nil, nil, errors.New(strings.ToTitle("UUID not in DataStore"))
 	}
 	// update file content
 	versions := fileObject.Versions
@@ -134,7 +162,7 @@ func _storeFile(username string, filename string, content string) error {
 	fileObject.Versions = versions
 	fileObject.Content = content
 
-	return nil
+	return nil, nil, nil
 }
 
 func writeHash(UUID userlib.UUID, entry Entry, oldEntry Entry) {
@@ -165,6 +193,9 @@ func writeHash(UUID userlib.UUID, entry Entry, oldEntry Entry) {
 }
 
 func loadFile(w http.ResponseWriter, req *http.Request) {
+	/*
+		Print hashroot and file content to client.
+	*/
 	var jsonData LoadFileRequest
 	err := json.NewDecoder(req.Body).Decode(&jsonData)
 	if err != nil {
@@ -174,7 +205,7 @@ func loadFile(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	// TODO: use json => marshal for output
+
 	fmt.Fprintf(w, string(hashroot[:])+"\n"+file_content)
 	fmt.Println("Success")
 }
