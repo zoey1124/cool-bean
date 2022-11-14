@@ -44,7 +44,9 @@ var _ = Describe("Server Tests", func() {
 		list = append(list, Content{content: someFileContent})
 		someMerkleTree, _ = mt.NewTree(list)
 		// Generate a FileObject
-		fileObject := FileObject{Content: string(someFileContent), MerkleTree: someMerkleTree}
+		fileObject := FileObject{Content: string(someFileContent),
+			MerkleTree: someMerkleTree,
+			Versions:   nil}
 		// Put UUID -> FileObject in DataStore
 		DataStore[UUID] = fileObject
 	})

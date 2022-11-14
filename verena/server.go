@@ -4,16 +4,20 @@ package main
 Usage:
 To run server (from Terminal command line): `go run server.go`
 To interact with the Server, open a separate terminal:
-To load file from Server: `curl -X POST localhost:8090/loadFile -H 'Content-Type: application/json' -d '{"username":"<USERNAME>", "password":"<PASSWORD>", "filename":"<FILENAME>"}'`
+To load file from Server: `curl -X POST localhost:8091/loadFile -H 'Content-Type: application/json' -d '{"username":"<USERNAME>", "password":"<PASSWORD>", "filename":"<FILENAME>"}'`
 To store a file to Server: TODO
 */
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"reflect"
+	"strings"
 
 	mt "github.com/cbergoon/merkletree"
 	"github.com/cs161-staff/project2-starter-code/client"
@@ -88,7 +92,22 @@ type LoadFileRequest struct {
 type FileObject struct {
 	Content    string
 	MerkleTree *mt.MerkleTree
+	Versions   []Content
 }
+
+type Entry struct {
+	Hash      []byte `json:"hash"`
+	Version   int    `json:"version"`
+	PublicKey string `json:"publicKey"`
+}
+
+type PutRequest struct {
+	UUID     userlib.UUID `json:"uuid"`
+	Entry    Entry        `json:"entry"`
+	OldEntry Entry        `json:"oldEntry"`
+}
+
+/* ============================ API ================================= */
 
 func initUser(username string, password string) {
 	client.InitUser(username, password)
@@ -99,9 +118,50 @@ func getUser(username string, password string) *client.User {
 	return user
 }
 
-func storeFile(username string, filename string, content string) {
-	// update merkle tree
+func _storeFile(username string, filename string, content string) error {
+	// Get UUID
+	UUID, _ := GetUUID(username, filename)
+	// Get content and merkle tree
+	fileObject, ok := DataStore[UUID]
+	if !ok {
+		return errors.New(strings.ToTitle("UUID not in DataStore"))
+	}
 	// update file content
+	versions := fileObject.Versions
+	new_content := Content{content: []byte(content)}
+	versions = append(versions, new_content)
+	// fileObject.MerkleTree.RebuildTreeWith(versions)
+	fileObject.Versions = versions
+	fileObject.Content = content
+
+	return nil
+}
+
+func writeHash(UUID userlib.UUID, entry Entry, oldEntry Entry) {
+	/*
+		Forward old entry and new entry to Hash Server
+	*/
+	data, err := json.Marshal(PutRequest{
+		UUID:     UUID,
+		Entry:    entry,
+		OldEntry: oldEntry,
+	})
+	if err != nil {
+		panic(err)
+	}
+	requestBody := bytes.NewBuffer(data)
+	resp, err := http.Post(
+		"http://localhost:8090/put",
+		"application/json",
+		requestBody,
+	)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+
+	fmt.Println(string(body[:]))
 }
 
 func loadFile(w http.ResponseWriter, req *http.Request) {
@@ -114,7 +174,8 @@ func loadFile(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Fprintf(w, "get succedded for hashroot:"+string(hashroot)+"file content:"+file_content)
+	// TODO: use json => marshal for output
+	fmt.Fprintf(w, string(hashroot[:])+"\n"+file_content)
 	fmt.Println("Success")
 }
 
@@ -138,7 +199,7 @@ func appendFile(user *client.User, filename string, content []byte) {
 }
 
 func main() {
-	// test case
+	// test loadFile
 	UUID, _ := GetUUID("Alice", "somefile")
 	someFileContent := []byte("some file content")
 	// Generate a Merkle Tree
@@ -149,9 +210,14 @@ func main() {
 	fileObject := FileObject{Content: string(someFileContent), MerkleTree: someMerkleTree}
 	// Put UUID -> FileObject in DataStore
 	DataStore[UUID] = fileObject
-	// `curl -X POST localhost:8090/loadFile -H 'Content-Type: application/json' -d '{"username":"Alice", "password":"12345", "filename":"somefile"}'`
+	// `curl -X POST localhost:8091/loadFile -H 'Content-Type: application/json' -d '{"username":"Alice", "password":"12345", "filename":"somefile"}' --output <FILE>`
 
 	http.HandleFunc("/loadFile", loadFile)
 
-	http.ListenAndServe(":8090", nil)
+	http.ListenAndServe(":8091", nil)
+
+	// test writeHash
+	writeHash(UUID,
+		Entry{Hash: []byte("c"), Version: 2, PublicKey: "Alice"},
+		Entry{Hash: []byte("b"), Version: 1, PublicKey: "Alice"})
 }
