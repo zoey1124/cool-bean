@@ -1,25 +1,122 @@
 package main
 
+/*
+Usage:
+To run server (from Terminal command line): `go run server.go`
+To interact with the Server, open a separate terminal:
+To load file from Server:
+	`curl -X POST localhost:8091/loadFile -H 'Content-Type: application/json' -d '{"username":"<USERNAME>", "password":"<PASSWORD>", "filename":"<FILENAME>"}'`
+To store a file to Server:
+    `curl -X POST localhost:8091/storeFile -H 'Content-Type: application/json' -d '{"username":"<USERNAME>", "password":"<PASSWORD>", "filename":"<FILENAME>", "content":"<CONTENT>"}'`
+*/
+
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
-	"os"
+	"net/http"
+	"reflect"
+	"strings"
 
+	mt "github.com/cbergoon/merkletree"
 	"github.com/cs161-staff/project2-starter-code/client"
+	userlib "github.com/cs161-staff/project2-userlib"
 )
 
-type Input struct {
-	Command  string `json:"command"`
+var datastore map[userlib.UUID]FileObject = make(map[userlib.UUID]FileObject)
+var DataStore = datastore
+
+/*================================= Util Functions ==================================*/
+func ByteLengthNormalize(byteArr []byte, k int) []byte {
+	/*
+			Return a []byte with length. If input []byte len > k, trim the byte array
+		    If input []byte length < k, padding with 0
+	*/
+	if len(byteArr) >= k {
+		return byteArr[:k]
+	}
+	// Padding array with zero to length of k
+	n := len(byteArr)
+	for i := 0; i < (k - n); i++ {
+		byteArr = append(byteArr, 0)
+	}
+	return byteArr
+}
+
+func GetUUID(username string, filename string) (userlib.UUID, error) {
+	/*
+		Return UUID(H(username||filename))
+	*/
+	username_byte := ByteLengthNormalize([]byte(username), 16)
+	filename_byte := ByteLengthNormalize([]byte(filename), 16)
+	UUID, err := userlib.UUIDFromBytes(userlib.Hash(append(username_byte, filename_byte...)))
+	if err != nil {
+		return userlib.UUIDNew(), err
+	}
+	return UUID, nil
+}
+
+/*=================== Merkle Tree: Implement the Content Interface ===================*/
+type LeafContent struct {
+	c []byte // []byte(plaintext_content)
+}
+
+// CalculateHash hashes the values of a Content
+func (t LeafContent) CalculateHash() ([]byte, error) {
+	h := sha256.New()
+	if _, err := h.Write(t.c); err != nil {
+		return nil, err
+	}
+
+	return h.Sum(nil), nil
+}
+
+// Equals tests for equality of two Contents
+func (t LeafContent) Equals(other mt.Content) (bool, error) {
+	// DeepEqual returns equal if
+	//     1. Both slices are nil or non-nil
+	// 	   2. Both slice have the same length
+	// 	   3. Corresponding slots have the same value
+	return reflect.DeepEqual(t.c, other.(LeafContent).c), nil
+}
+
+/*=========================== End of Merkle Tree Implementation ========================*/
+
+type LoadFileRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Filename string `json:"filename"`
+}
+
+type StoreFileRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Filename string `json:"filename"`
 	Content  string `json:"content"`
 }
 
-type Inputs struct {
-	Inputs []Input `json:"inputs"`
+type FileObject struct {
+	Plaintext  string         // file content plaintext
+	MerkleTree *mt.MerkleTree // merkle tree
+	Versions   []mt.Content   // history versions of file content
 }
+
+type EntryRecord struct {
+	Hash      []byte `json:"hash"`
+	Version   int    `json:"version"`
+	PublicKey string `json:"publicKey"`
+}
+
+type PutRequest struct {
+	UUID     userlib.UUID `json:"uuid"`
+	Entry    EntryRecord  `json:"entry"`
+	OldEntry EntryRecord  `json:"oldEntry"`
+}
+
+/* ============================ API ================================= */
 
 func initUser(username string, password string) {
 	client.InitUser(username, password)
@@ -30,12 +127,130 @@ func getUser(username string, password string) *client.User {
 	return user
 }
 
-func storeFile(user *client.User, filename string, content []byte) {
-	user.StoreFile(filename, content)
+func storeFile(w http.ResponseWriter, req *http.Request) {
+	var jsonData StoreFileRequest
+	err := json.NewDecoder(req.Body).Decode(&jsonData)
+	if err != nil {
+		panic(err)
+	}
+	hashroot, merklePath, err := _storeFile(jsonData.Username, jsonData.Filename, jsonData.Content)
+	if err != nil {
+		panic(err)
+	}
+	merklePathString := ""
+	for _, h := range merklePath {
+		merklePathString += string(h[:]) + " "
+	}
+	fmt.Fprintf(w, string(hashroot[:])+"\n"+merklePathString)
+	fmt.Println("Success")
 }
 
-func loadFile(user *client.User, filename string) {
-	user.LoadFile(filename)
+func _storeFile(username string, filename string, content string) ([]byte, [][]byte, error) {
+	/*
+		Return new root hash and sibling node hashes
+	*/
+	// Get UUID
+	UUID, _ := GetUUID(username, filename)
+	// Get content and merkle tree
+	fileObject, ok := DataStore[UUID]
+
+	if !ok {
+		// 1. First time the file has been stored
+		leafContent := LeafContent{c: []byte(content)}
+		var leaves []mt.Content
+		leaves = append(leaves, leafContent)
+		merkleTree, err := mt.NewTree(leaves)
+		if err != nil {
+			return nil, nil, errors.New(strings.ToTitle("Can't build a new merkle tree"))
+		}
+		fileObject = FileObject{Plaintext: content,
+			MerkleTree: merkleTree,
+			Versions:   leaves}
+		DataStore[UUID] = fileObject
+		// Get roothash and merkle path
+		roothash := merkleTree.MerkleRoot()
+		merklePath, _, err := merkleTree.GetMerklePath(leafContent)
+		return roothash, merklePath, nil
+	}
+
+	// 2. File existed in DataStore before, update file content
+	versions := fileObject.Versions
+	new_content := LeafContent{c: []byte(content)}
+	versions = append(versions, new_content)
+	err := fileObject.MerkleTree.RebuildTreeWith(versions)
+	if err != nil {
+		return nil, nil, errors.New("Can't rebuild merkle tree with new content")
+	}
+	fileObject.Versions = versions
+	fileObject.Plaintext = content
+	DataStore[UUID] = fileObject
+
+	roothash := fileObject.MerkleTree.MerkleRoot()
+	merklePath, _, err := fileObject.MerkleTree.GetMerklePath(new_content)
+	if err != nil {
+		return nil, nil, errors.New("Can't get new merkle path")
+	}
+	return roothash, merklePath, nil
+}
+
+func writeHash(UUID userlib.UUID, entry EntryRecord, oldEntry EntryRecord) {
+	/*
+		Forward old entry and new entry to Hash Server
+	*/
+	data, err := json.Marshal(PutRequest{
+		UUID:     UUID,
+		Entry:    entry,
+		OldEntry: oldEntry,
+	})
+	if err != nil {
+		panic(err)
+	}
+	requestBody := bytes.NewBuffer(data)
+	resp, err := http.Post(
+		"http://localhost:8090/put",
+		"application/json",
+		requestBody,
+	)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+
+	fmt.Println(string(body[:]))
+}
+
+func loadFile(w http.ResponseWriter, req *http.Request) {
+	/*
+		Print hashroot and file content to client.
+	*/
+	var jsonData LoadFileRequest
+	err := json.NewDecoder(req.Body).Decode(&jsonData)
+	if err != nil {
+		panic(err)
+	}
+	hashroot, file_content, err := _loadFile(jsonData.Username, jsonData.Filename)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Fprintf(w, string(hashroot[:])+"\n"+file_content)
+	fmt.Println("Success")
+}
+
+func _loadFile(username string, filename string) ([]byte, string, error) {
+	// Return: hashroot, file_content
+	// 1. get UUID from username and filename
+	UUID, err := GetUUID(username, filename)
+	if err != nil {
+		return nil, "", err
+	}
+	// 2. get hashroot and content
+	var fileObject FileObject
+	fileObject = datastore[UUID]
+	hashroot := fileObject.MerkleTree.MerkleRoot()
+	plaintext := fileObject.Plaintext
+	return hashroot, plaintext, nil
 }
 
 func appendFile(user *client.User, filename string, content []byte) {
@@ -43,44 +258,15 @@ func appendFile(user *client.User, filename string, content []byte) {
 }
 
 func main() {
-	// Read command line argument
-	if len(os.Args) < 2 {
-		fmt.Println("Please provide input file")
-		return
-	}
-	input_file := os.Args[1]
+	http.HandleFunc("/loadFile", loadFile)
+	http.HandleFunc("/storeFile", storeFile)
 
-	// Read input commands from a json file
-	jsonFile, err := os.Open(input_file)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println("Successfully Opened json file")
-	defer jsonFile.Close()
-	byteValue, _ := ioutil.ReadAll(jsonFile)
-	var inputs Inputs
-	json.Unmarshal([]byte(byteValue), &inputs)
-
-	for i := 0; i < len(inputs.Inputs); i++ {
-		input := inputs.Inputs[i]
-		command := input.Command
-		username := input.Username
-		password := input.Password
-
-		// Parse command and call client functions
-		fmt.Println(command)
-		switch command {
-		case "InitUser":
-			initUser(username, password)
-		case "GetUser":
-			getUser(username, password)
-		case "StoreFile":
-			storeFile(getUser(username, password), input.Filename, []byte(input.Content))
-		case "LoadFile":
-			loadFile(getUser(username, password), input.Filename)
-		case "AppendFile":
-			appendFile(getUser(username, password), input.Filename, []byte(input.Content))
-		}
-	}
+	http.ListenAndServe(":8091", nil)
+	/*
+		Example commands in Terminal to run:
+		1. store a file
+			`curl -X POST localhost:8091/storeFile -H 'Content-Type: application/json' -d '{"username":"Alice", "password":"12345", "filename":"somefile.txt", "content":"This is content"}'`
+		2. load a file
+			`curl -X POST localhost:8091/loadFile -H 'Content-Type: application/json' -d '{"username":"Alice", "password":"12345", "filename":"somefile.txt"}' --output <FILE>`
+	*/
 }

@@ -11,6 +11,7 @@ require (
 )
 
 require (
+	github.com/cbergoon/merkletree v0.2.0 // indirect
 	github.com/google/uuid v1.2.0 // indirect
 	golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83 // indirect
 	golang.org/x/net v0.0.0-20210428140749-89ef3d95e781 // indirect
