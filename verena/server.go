@@ -4,8 +4,10 @@ package main
 Usage:
 To run server (from Terminal command line): `go run server.go`
 To interact with the Server, open a separate terminal:
-To load file from Server: `curl -X POST localhost:8091/loadFile -H 'Content-Type: application/json' -d '{"username":"<USERNAME>", "password":"<PASSWORD>", "filename":"<FILENAME>"}'`
-To store a file to Server: TODO
+To load file from Server:
+	`curl -X POST localhost:8091/loadFile -H 'Content-Type: application/json' -d '{"username":"<USERNAME>", "password":"<PASSWORD>", "filename":"<FILENAME>"}'`
+To store a file to Server:
+    `curl -X POST localhost:8091/storeFile -H 'Content-Type: application/json' -d '{"username":"<USERNAME>", "password":"<PASSWORD>", "filename":"<FILENAME>", "content":"<CONTENT>"}'`
 */
 
 import (
@@ -58,14 +60,14 @@ func GetUUID(username string, filename string) (userlib.UUID, error) {
 }
 
 /*=================== Merkle Tree: Implement the Content Interface ===================*/
-type Content struct {
-	content []byte
+type LeafContent struct {
+	c []byte // []byte(plaintext_content)
 }
 
 // CalculateHash hashes the values of a Content
-func (t Content) CalculateHash() ([]byte, error) {
+func (t LeafContent) CalculateHash() ([]byte, error) {
 	h := sha256.New()
-	if _, err := h.Write(t.content); err != nil {
+	if _, err := h.Write(t.c); err != nil {
 		return nil, err
 	}
 
@@ -73,12 +75,12 @@ func (t Content) CalculateHash() ([]byte, error) {
 }
 
 // Equals tests for equality of two Contents
-func (t Content) Equals(other mt.Content) (bool, error) {
+func (t LeafContent) Equals(other mt.Content) (bool, error) {
 	// DeepEqual returns equal if
 	//     1. Both slices are nil or non-nil
 	// 	   2. Both slice have the same length
 	// 	   3. Corresponding slots have the same value
-	return reflect.DeepEqual(t.content, other.(Content).content), nil
+	return reflect.DeepEqual(t.c, other.(LeafContent).c), nil
 }
 
 /*=========================== End of Merkle Tree Implementation ========================*/
@@ -97,12 +99,12 @@ type StoreFileRequest struct {
 }
 
 type FileObject struct {
-	Content    string
-	MerkleTree *mt.MerkleTree
-	Versions   []mt.Content
+	Plaintext  string         // file content plaintext
+	MerkleTree *mt.MerkleTree // merkle tree
+	Versions   []mt.Content   // history versions of file content
 }
 
-type Entry struct {
+type EntryRecord struct {
 	Hash      []byte `json:"hash"`
 	Version   int    `json:"version"`
 	PublicKey string `json:"publicKey"`
@@ -110,8 +112,8 @@ type Entry struct {
 
 type PutRequest struct {
 	UUID     userlib.UUID `json:"uuid"`
-	Entry    Entry        `json:"entry"`
-	OldEntry Entry        `json:"oldEntry"`
+	Entry    EntryRecord  `json:"entry"`
+	OldEntry EntryRecord  `json:"oldEntry"`
 }
 
 /* ============================ API ================================= */
@@ -151,19 +153,37 @@ func _storeFile(username string, filename string, content string) ([]byte, [][]b
 	UUID, _ := GetUUID(username, filename)
 	// Get content and merkle tree
 	fileObject, ok := DataStore[UUID]
+
 	if !ok {
-		return nil, nil, errors.New(strings.ToTitle("UUID not in DataStore"))
+		// 1. First time the file has been stored
+		leafContent := LeafContent{c: []byte(content)}
+		var leaves []mt.Content
+		leaves = append(leaves, leafContent)
+		merkleTree, err := mt.NewTree(leaves)
+		if err != nil {
+			return nil, nil, errors.New(strings.ToTitle("Can't build a new merkle tree"))
+		}
+		fileObject = FileObject{Plaintext: content,
+			MerkleTree: merkleTree,
+			Versions:   leaves}
+		DataStore[UUID] = fileObject
+		// Get roothash and merkle path
+		roothash := merkleTree.MerkleRoot()
+		merklePath, _, err := merkleTree.GetMerklePath(leafContent)
+		return roothash, merklePath, nil
 	}
-	// update file content
+
+	// 2. File existed in DataStore before, update file content
 	versions := fileObject.Versions
-	new_content := Content{content: []byte(content)}
+	new_content := LeafContent{c: []byte(content)}
 	versions = append(versions, new_content)
 	err := fileObject.MerkleTree.RebuildTreeWith(versions)
 	if err != nil {
 		return nil, nil, errors.New("Can't rebuild merkle tree with new content")
 	}
 	fileObject.Versions = versions
-	fileObject.Content = content
+	fileObject.Plaintext = content
+	DataStore[UUID] = fileObject
 
 	roothash := fileObject.MerkleTree.MerkleRoot()
 	merklePath, _, err := fileObject.MerkleTree.GetMerklePath(new_content)
@@ -173,7 +193,7 @@ func _storeFile(username string, filename string, content string) ([]byte, [][]b
 	return roothash, merklePath, nil
 }
 
-func writeHash(UUID userlib.UUID, entry Entry, oldEntry Entry) {
+func writeHash(UUID userlib.UUID, entry EntryRecord, oldEntry EntryRecord) {
 	/*
 		Forward old entry and new entry to Hash Server
 	*/
@@ -229,8 +249,8 @@ func _loadFile(username string, filename string) ([]byte, string, error) {
 	var fileObject FileObject
 	fileObject = datastore[UUID]
 	hashroot := fileObject.MerkleTree.MerkleRoot()
-	content := fileObject.Content
-	return hashroot, content, nil
+	plaintext := fileObject.Plaintext
+	return hashroot, plaintext, nil
 }
 
 func appendFile(user *client.User, filename string, content []byte) {
@@ -238,25 +258,15 @@ func appendFile(user *client.User, filename string, content []byte) {
 }
 
 func main() {
-	// test loadFile
-	UUID, _ := GetUUID("Alice", "somefile")
-	someFileContent := []byte("some file content")
-	// Generate a Merkle Tree
-	var list []mt.Content
-	list = append(list, Content{content: someFileContent})
-	someMerkleTree, _ := mt.NewTree(list)
-	// Generate a FileObject
-	fileObject := FileObject{Content: string(someFileContent), MerkleTree: someMerkleTree}
-	// Put UUID -> FileObject in DataStore
-	DataStore[UUID] = fileObject
-	// `curl -X POST localhost:8091/loadFile -H 'Content-Type: application/json' -d '{"username":"Alice", "password":"12345", "filename":"somefile"}' --output <FILE>`
-
 	http.HandleFunc("/loadFile", loadFile)
+	http.HandleFunc("/storeFile", storeFile)
 
 	http.ListenAndServe(":8091", nil)
-
-	// test writeHash
-	writeHash(UUID,
-		Entry{Hash: []byte("c"), Version: 2, PublicKey: "Alice"},
-		Entry{Hash: []byte("b"), Version: 1, PublicKey: "Alice"})
+	/*
+		Example commands in Terminal to run:
+		1. store a file
+			`curl -X POST localhost:8091/storeFile -H 'Content-Type: application/json' -d '{"username":"Alice", "password":"12345", "filename":"somefile.txt", "content":"This is content"}'`
+		2. load a file
+			`curl -X POST localhost:8091/loadFile -H 'Content-Type: application/json' -d '{"username":"Alice", "password":"12345", "filename":"somefile.txt"}' --output <FILE>`
+	*/
 }
