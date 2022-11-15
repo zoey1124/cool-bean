@@ -104,16 +104,16 @@ type FileObject struct {
 	Versions   []mt.Content   // history versions of file content
 }
 
-type EntryRecord struct {
-	Hash      []byte `json:"hash"`
+type Entry struct {
+	Hash      string `json:"hash"`
 	Version   int    `json:"version"`
 	PublicKey string `json:"publicKey"`
 }
 
 type PutRequest struct {
 	UUID     userlib.UUID `json:"uuid"`
-	Entry    EntryRecord  `json:"entry"`
-	OldEntry EntryRecord  `json:"oldEntry"`
+	Entry    Entry  `json:"entry"`
+	OldEntry Entry  `json:"oldEntry"`
 }
 
 /* ============================ API ================================= */
@@ -193,7 +193,7 @@ func _storeFile(username string, filename string, content string) ([]byte, [][]b
 	return roothash, merklePath, nil
 }
 
-func writeHash(UUID userlib.UUID, entry EntryRecord, oldEntry EntryRecord) {
+func writeHash(UUID userlib.UUID, entry Entry, oldEntry Entry) {
 	/*
 		Forward old entry and new entry to Hash Server
 	*/

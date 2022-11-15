@@ -13,12 +13,15 @@ import (
     "encoding/json"
     "fmt"
     "net/http"
+    "github.com/google/uuid"
 )
 
+type UUID = uuid.UUID
+
 type Entry struct {
-    Hash          string `json:"hash"`
-    Version       int    `json:"version"`
-    PublicKey     string `json:"publicKey"`
+    Hash string `json:"hash"`
+    Version int `json:"version"`
+    PublicKey string `json:"publicKey"`
 }
 
 func (e Entry) String() string {
@@ -26,16 +29,16 @@ func (e Entry) String() string {
 }
 
 type GetRequest struct {
-    Uuid string `json:"uuid"`
+    UUID UUID `json:"uuid"`
 }
 
 type PutRequest struct {
-    Uuid  string `json:"uuid"`
+    UUID UUID `json:"uuid"`
     Entry Entry  `json:"entry"`
     OldEntry Entry `json:"oldEntry"`
 }
 
-var kv_store = make(map[string]Entry)
+var kv_store = make(map[UUID]Entry)
 
 func get(w http.ResponseWriter, req *http.Request) {
     var jsonData GetRequest
@@ -44,16 +47,16 @@ func get(w http.ResponseWriter, req *http.Request) {
         panic(err)
     }
 
-    uuid := jsonData.Uuid
-    value, exists := kv_store[uuid]
+    reqUUID := jsonData.UUID
+    value, exists := kv_store[reqUUID]
 
     if ! exists {
-        fmt.Println("no key found: " + uuid)
+        fmt.Println("no key found: " + reqUUID.String())
         fmt.Fprintf(w, "null\n")
         return
     }
     fmt.Fprintf(w, value.String() + "\n")
-    fmt.Println("Successful get for uuid: " + uuid)
+    fmt.Println("Successful get for uuid: " + reqUUID.String())
 }
 
 func put(w http.ResponseWriter, req *http.Request) {
@@ -63,10 +66,10 @@ func put(w http.ResponseWriter, req *http.Request) {
         panic(err)
     }
 
-    uuid := jsonData.Uuid
+    reqUUID := jsonData.UUID
     entry := jsonData.Entry
     oldEntry := jsonData.OldEntry
-    value, exists := kv_store[uuid]
+    value, exists := kv_store[reqUUID]
 
     var errorMessage string
     success := true
@@ -97,19 +100,13 @@ func put(w http.ResponseWriter, req *http.Request) {
         fmt.Fprintf(w, "null\n")
         return
     }
-    kv_store[uuid] = entry
-    fmt.Println("Successful put for uuid: " + uuid + " (entry: " + kv_store[uuid].String() + ")")
-    fmt.Fprintf(w, kv_store[uuid].String() + "\n")
+    kv_store[reqUUID] = entry
+    newEntry:= kv_store[reqUUID]
+    fmt.Println("Successful put for uuid: " + reqUUID.String() + " (entry: " + newEntry.String() + ")")
+    fmt.Fprintf(w, newEntry.String() + "\n")
 }
 
 func main() {
-    // test case
-    kv_store["1"] = Entry{
-        Hash:      "b",
-        Version:   1,
-        PublicKey: "Alice",
-    }
-
     http.HandleFunc("/get", get)
     http.HandleFunc("/put", put)
 
