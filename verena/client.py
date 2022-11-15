@@ -1,23 +1,33 @@
+import json
 import requests
 import uuid
 
 USERNAME = "Alice"
 PASSWORD = "12345"
 
-def create_command(command_name):
-    return {
-        "username": USERNAME,
-        "password": PASSWORD,
-        "command": command_name
-    }
+class StoreFileResponse:
+    def __init__(self, response_text):
+        response_json = json.loads(response_text)
+        self.hash_root = bytearray(response_json["hashRoot"], "utf-8")
+        self.merkle_path = [bytearray(node, "utf-8") for node in response_json["merklePath"].split(" ")]
+
+class LoadFileResponse:
+    def __init__(self, response_text):
+        response_json = json.loads(response_text)
+        self.hash_root = bytearray(response_json["hashRoot"], "utf-8")
+        self.content = response_json["content"]
 
 def load_file(filename):
     r = requests.get("http://localhost:8091/loadFile", json={"username":USERNAME, "password":PASSWORD, "filename":filename})
-    print(r.text)
+    response = LoadFileResponse(r.text)
+    print("hash root:", response.hash_root)
+    print("content:", response.content)
 
 def store_file(filename, content):
     r = requests.put("http://localhost:8091/storeFile", json={"username":USERNAME, "password":PASSWORD, "filename":filename, "content":content})
-    print(r.text)
+    response = StoreFileResponse(r.text)
+    print("hash root:", response.hash_root)
+    print("merkle path:", response.merkle_path)
 
 def test_hash_server():
     test_uuid = str(uuid.uuid4())

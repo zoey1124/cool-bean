@@ -40,6 +40,14 @@ type PutRequest struct {
 
 var kv_store = make(map[UUID]Entry)
 
+func writeResponse(w http.ResponseWriter, entry Entry) {
+    jsonResp, err := json.Marshal(entry)
+    if err != nil {
+        panic(err)
+    }
+    w.Write(jsonResp)
+}
+
 func get(w http.ResponseWriter, req *http.Request) {
     var jsonData GetRequest
     err := json.NewDecoder(req.Body).Decode(&jsonData)
@@ -52,10 +60,10 @@ func get(w http.ResponseWriter, req *http.Request) {
 
     if ! exists {
         fmt.Println("no key found: " + reqUUID.String())
-        fmt.Fprintf(w, "null\n")
+        writeResponse(w, Entry{})
         return
     }
-    fmt.Fprintf(w, value.String() + "\n")
+    writeResponse(w, value)
     fmt.Println("Successful get for uuid: " + reqUUID.String())
 }
 
@@ -97,13 +105,13 @@ func put(w http.ResponseWriter, req *http.Request) {
 
     if ! success {
         fmt.Println(errorMessage)
-        fmt.Fprintf(w, "null\n")
+        writeResponse(w, Entry{})
         return
     }
     kv_store[reqUUID] = entry
     newEntry:= kv_store[reqUUID]
     fmt.Println("Successful put for uuid: " + reqUUID.String() + " (entry: " + newEntry.String() + ")")
-    fmt.Fprintf(w, newEntry.String() + "\n")
+    writeResponse(w, newEntry)
 }
 
 func main() {

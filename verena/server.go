@@ -91,11 +91,21 @@ type LoadFileRequest struct {
 	Filename string `json:"filename"`
 }
 
+type LoadFileResponse struct {
+	Hashroot string `json:"hashRoot"`
+	Content string `json:"content"`
+}
+
 type StoreFileRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Filename string `json:"filename"`
 	Content  string `json:"content"`
+}
+
+type StoreFileResponse struct {
+	Hashroot string `json:"hashRoot"`
+	MerklePath string `json:"merklePath"`
 }
 
 type FileObject struct {
@@ -141,7 +151,11 @@ func storeFile(w http.ResponseWriter, req *http.Request) {
 	for _, h := range merklePath {
 		merklePathString += string(h[:]) + " "
 	}
-	fmt.Fprintf(w, string(hashroot[:])+"\n"+merklePathString)
+	jsonResp, err := json.Marshal(StoreFileResponse{string(hashroot), merklePathString})
+    if err != nil {
+        panic(err)
+    }
+    w.Write(jsonResp)
 	fmt.Println("Success")
 }
 
@@ -234,7 +248,11 @@ func loadFile(w http.ResponseWriter, req *http.Request) {
 		panic(err)
 	}
 
-	fmt.Fprintf(w, string(hashroot[:])+"\n"+file_content)
+	jsonResp, err := json.Marshal(LoadFileResponse{string(hashroot), file_content})
+    if err != nil {
+        panic(err)
+    }
+    w.Write(jsonResp)
 	fmt.Println("Success")
 }
 
