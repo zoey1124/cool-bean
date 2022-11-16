@@ -91,11 +91,24 @@ type LoadFileRequest struct {
 	Filename string `json:"filename"`
 }
 
+type LoadFileResponse struct {
+	Hashroot string `json:"hashRoot"`
+	Content string `json:"content"`
+	Entry Entry `json:"entry"`
+}
+
 type StoreFileRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Filename string `json:"filename"`
 	Content  string `json:"content"`
+}
+
+type StoreFileResponse struct {
+	Hashroot string `json:"hashRoot"`
+	MerklePath string `json:"merklePath"`
+	UUID userlib.UUID `json:"uuid"`
+	OldEntry Entry `json:"oldEntry"`
 }
 
 type FileObject struct {
@@ -104,16 +117,20 @@ type FileObject struct {
 	Versions   []mt.Content   // history versions of file content
 }
 
-type EntryRecord struct {
-	Hash      []byte `json:"hash"`
+type Entry struct {
+	Hash      string `json:"hash"`
 	Version   int    `json:"version"`
 	PublicKey string `json:"publicKey"`
 }
 
+type GetRequest struct {
+	UUID userlib.UUID `json:"uuid"`
+}
+
 type PutRequest struct {
 	UUID     userlib.UUID `json:"uuid"`
-	Entry    EntryRecord  `json:"entry"`
-	OldEntry EntryRecord  `json:"oldEntry"`
+	Entry    Entry  `json:"entry"`
+	OldEntry Entry  `json:"oldEntry"`
 }
 
 /* ============================ API ================================= */
@@ -133,7 +150,7 @@ func storeFile(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	hashroot, merklePath, err := _storeFile(jsonData.Username, jsonData.Filename, jsonData.Content)
+	uuid, hashroot, merklePath, err := _storeFile(jsonData.Username, jsonData.Filename, jsonData.Content)
 	if err != nil {
 		panic(err)
 	}
@@ -141,11 +158,15 @@ func storeFile(w http.ResponseWriter, req *http.Request) {
 	for _, h := range merklePath {
 		merklePathString += string(h[:]) + " "
 	}
-	fmt.Fprintf(w, string(hashroot[:])+"\n"+merklePathString)
+	jsonResp, err := json.Marshal(StoreFileResponse{string(hashroot), merklePathString, uuid, bytesToEntry(_getHash(uuid))})
+    if err != nil {
+        panic(err)
+    }
+    w.Write(jsonResp)
 	fmt.Println("Success")
 }
 
-func _storeFile(username string, filename string, content string) ([]byte, [][]byte, error) {
+func _storeFile(username string, filename string, content string) (userlib.UUID, []byte, [][]byte, error) {
 	/*
 		Return new root hash and sibling node hashes
 	*/
@@ -161,7 +182,7 @@ func _storeFile(username string, filename string, content string) ([]byte, [][]b
 		leaves = append(leaves, leafContent)
 		merkleTree, err := mt.NewTree(leaves)
 		if err != nil {
-			return nil, nil, errors.New(strings.ToTitle("Can't build a new merkle tree"))
+			return UUID, nil, nil, errors.New(strings.ToTitle("Can't build a new merkle tree"))
 		}
 		fileObject = FileObject{Plaintext: content,
 			MerkleTree: merkleTree,
@@ -170,7 +191,7 @@ func _storeFile(username string, filename string, content string) ([]byte, [][]b
 		// Get roothash and merkle path
 		roothash := merkleTree.MerkleRoot()
 		merklePath, _, err := merkleTree.GetMerklePath(leafContent)
-		return roothash, merklePath, nil
+		return UUID, roothash, merklePath, nil
 	}
 
 	// 2. File existed in DataStore before, update file content
@@ -179,7 +200,7 @@ func _storeFile(username string, filename string, content string) ([]byte, [][]b
 	versions = append(versions, new_content)
 	err := fileObject.MerkleTree.RebuildTreeWith(versions)
 	if err != nil {
-		return nil, nil, errors.New("Can't rebuild merkle tree with new content")
+		return UUID, nil, nil, errors.New("Can't rebuild merkle tree with new content")
 	}
 	fileObject.Versions = versions
 	fileObject.Plaintext = content
@@ -188,12 +209,95 @@ func _storeFile(username string, filename string, content string) ([]byte, [][]b
 	roothash := fileObject.MerkleTree.MerkleRoot()
 	merklePath, _, err := fileObject.MerkleTree.GetMerklePath(new_content)
 	if err != nil {
-		return nil, nil, errors.New("Can't get new merkle path")
+		return UUID, nil, nil, errors.New("Can't get new merkle path")
 	}
-	return roothash, merklePath, nil
+	return UUID, roothash, merklePath, nil
 }
 
-func writeHash(UUID userlib.UUID, entry EntryRecord, oldEntry EntryRecord) {
+func loadFile(w http.ResponseWriter, req *http.Request) {
+	/*
+		Print hashroot and file content to client.
+	*/
+	var jsonData LoadFileRequest
+	err := json.NewDecoder(req.Body).Decode(&jsonData)
+	if err != nil {
+		panic(err)
+	}
+	uuid, hashroot, file_content, err := _loadFile(jsonData.Username, jsonData.Filename)
+	if err != nil {
+		panic(err)
+	}
+
+	jsonResp, err := json.Marshal(LoadFileResponse{string(hashroot), file_content, bytesToEntry(_getHash(uuid))})
+    if err != nil {
+        panic(err)
+    }
+    w.Write(jsonResp)
+	fmt.Println("Success")
+}
+
+func _loadFile(username string, filename string) (userlib.UUID, []byte, string, error) {
+	// Return: hashroot, file_content
+	// 1. get UUID from username and filename
+	UUID, err := GetUUID(username, filename)
+	if err != nil {
+		return UUID, nil, "", err
+	}
+	// 2. get hashroot and content
+	var fileObject FileObject
+	fileObject = datastore[UUID]
+	hashroot := fileObject.MerkleTree.MerkleRoot()
+	plaintext := fileObject.Plaintext
+	return UUID, hashroot, plaintext, nil
+}
+
+func appendFile(user *client.User, filename string, content []byte) {
+	user.AppendToFile(filename, content)
+}
+
+func getHash(w http.ResponseWriter, req *http.Request) {
+	var jsonData GetRequest
+	err := json.NewDecoder(req.Body).Decode(&jsonData)
+	if err != nil {
+		panic(err)
+	}
+	resp := _getHash(jsonData.UUID)
+	w.Write(resp)
+	fmt.Println(resp)
+}
+
+func _getHash(uuid userlib.UUID) []byte {
+	data, err := json.Marshal(GetRequest{uuid})
+	if err != nil {
+		panic(err)
+	}
+	resp, err := http.Post(
+		"http://localhost:8090/get",
+		"application/json",
+		bytes.NewBuffer(data),
+	)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	return body
+}
+
+func writeHash(w http.ResponseWriter, req *http.Request) {
+	var jsonData PutRequest
+	err := json.NewDecoder(req.Body).Decode(&jsonData)
+	if err != nil {
+		panic(err)
+	}
+	resp := _writeHash(jsonData.UUID, jsonData.Entry, jsonData.OldEntry)
+	w.Write(resp)
+}
+
+func _writeHash(UUID userlib.UUID, entry Entry, oldEntry Entry) []byte {
 	/*
 		Forward old entry and new entry to Hash Server
 	*/
@@ -216,50 +320,26 @@ func writeHash(UUID userlib.UUID, entry EntryRecord, oldEntry EntryRecord) {
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-
-	fmt.Println(string(body[:]))
-}
-
-func loadFile(w http.ResponseWriter, req *http.Request) {
-	/*
-		Print hashroot and file content to client.
-	*/
-	var jsonData LoadFileRequest
-	err := json.NewDecoder(req.Body).Decode(&jsonData)
 	if err != nil {
 		panic(err)
 	}
-	hashroot, file_content, err := _loadFile(jsonData.Username, jsonData.Filename)
+	return body
+}
+
+func bytesToEntry(entryBytes []byte) Entry {
+	var entry Entry
+	err := json.Unmarshal(entryBytes, &entry)
 	if err != nil {
 		panic(err)
 	}
-
-	fmt.Fprintf(w, string(hashroot[:])+"\n"+file_content)
-	fmt.Println("Success")
-}
-
-func _loadFile(username string, filename string) ([]byte, string, error) {
-	// Return: hashroot, file_content
-	// 1. get UUID from username and filename
-	UUID, err := GetUUID(username, filename)
-	if err != nil {
-		return nil, "", err
-	}
-	// 2. get hashroot and content
-	var fileObject FileObject
-	fileObject = datastore[UUID]
-	hashroot := fileObject.MerkleTree.MerkleRoot()
-	plaintext := fileObject.Plaintext
-	return hashroot, plaintext, nil
-}
-
-func appendFile(user *client.User, filename string, content []byte) {
-	user.AppendToFile(filename, content)
+	return entry
 }
 
 func main() {
 	http.HandleFunc("/loadFile", loadFile)
 	http.HandleFunc("/storeFile", storeFile)
+	http.HandleFunc("/getHash", getHash)
+	http.HandleFunc("/writeHash", writeHash)
 
 	http.ListenAndServe(":8091", nil)
 	/*

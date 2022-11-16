@@ -13,12 +13,15 @@ import (
     "encoding/json"
     "fmt"
     "net/http"
+    "github.com/google/uuid"
 )
 
+type UUID = uuid.UUID
+
 type Entry struct {
-    Hash          string `json:"hash"`
-    Version       int    `json:"version"`
-    PublicKey     string `json:"publicKey"`
+    Hash string `json:"hash"`
+    Version int `json:"version"`
+    PublicKey string `json:"publicKey"`
 }
 
 func (e Entry) String() string {
@@ -26,16 +29,25 @@ func (e Entry) String() string {
 }
 
 type GetRequest struct {
-    Uuid string `json:"uuid"`
+    UUID UUID `json:"uuid"`
 }
 
 type PutRequest struct {
-    Uuid  string `json:"uuid"`
+    UUID UUID `json:"uuid"`
     Entry Entry  `json:"entry"`
     OldEntry Entry `json:"oldEntry"`
 }
 
-var kv_store = make(map[string]Entry)
+var kv_store = make(map[UUID]Entry)
+
+// signing is not yet implemented, but will be required to secure this
+func writeResponse(w http.ResponseWriter, entry Entry) {
+    jsonResp, err := json.Marshal(entry)
+    if err != nil {
+        panic(err)
+    }
+    w.Write(jsonResp)
+}
 
 func get(w http.ResponseWriter, req *http.Request) {
     var jsonData GetRequest
@@ -44,16 +56,16 @@ func get(w http.ResponseWriter, req *http.Request) {
         panic(err)
     }
 
-    uuid := jsonData.Uuid
-    value, exists := kv_store[uuid]
+    reqUUID := jsonData.UUID
+    value, exists := kv_store[reqUUID]
 
     if ! exists {
-        fmt.Println("no key found: " + uuid)
-        fmt.Fprintf(w, "null\n")
+        fmt.Println("no key found: " + reqUUID.String())
+        writeResponse(w, Entry{})
         return
     }
-    fmt.Fprintf(w, value.String() + "\n")
-    fmt.Println("Successful get for uuid: " + uuid)
+    writeResponse(w, value)
+    fmt.Println("Successful get for uuid: " + reqUUID.String())
 }
 
 func put(w http.ResponseWriter, req *http.Request) {
@@ -63,10 +75,10 @@ func put(w http.ResponseWriter, req *http.Request) {
         panic(err)
     }
 
-    uuid := jsonData.Uuid
+    reqUUID := jsonData.UUID
     entry := jsonData.Entry
     oldEntry := jsonData.OldEntry
-    value, exists := kv_store[uuid]
+    value, exists := kv_store[reqUUID]
 
     var errorMessage string
     success := true
@@ -94,22 +106,16 @@ func put(w http.ResponseWriter, req *http.Request) {
 
     if ! success {
         fmt.Println(errorMessage)
-        fmt.Fprintf(w, "null\n")
+        writeResponse(w, Entry{})
         return
     }
-    kv_store[uuid] = entry
-    fmt.Println("Successful put for uuid: " + uuid + " (entry: " + kv_store[uuid].String() + ")")
-    fmt.Fprintf(w, kv_store[uuid].String() + "\n")
+    kv_store[reqUUID] = entry
+    newEntry:= kv_store[reqUUID]
+    fmt.Println("Successful put for uuid: " + reqUUID.String() + " (entry: " + newEntry.String() + ")")
+    writeResponse(w, newEntry)
 }
 
 func main() {
-    // test case
-    kv_store["1"] = Entry{
-        Hash:      "b",
-        Version:   1,
-        PublicKey: "Alice",
-    }
-
     http.HandleFunc("/get", get)
     http.HandleFunc("/put", put)
 
