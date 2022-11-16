@@ -40,6 +40,7 @@ type PutRequest struct {
 
 var kv_store = make(map[UUID]Entry)
 
+// signing is not yet implemented, but will be required to secure this
 func writeResponse(w http.ResponseWriter, entry Entry) {
     jsonResp, err := json.Marshal(entry)
     if err != nil {
