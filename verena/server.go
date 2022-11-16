@@ -107,7 +107,8 @@ type StoreFileRequest struct {
 type StoreFileResponse struct {
 	Hashroot string `json:"hashRoot"`
 	MerklePath string `json:"merklePath"`
-	Entry Entry `json:"entry"`
+	UUID userlib.UUID `json:"uuid"`
+	OldEntry Entry `json:"oldEntry"`
 }
 
 type FileObject struct {
@@ -157,7 +158,7 @@ func storeFile(w http.ResponseWriter, req *http.Request) {
 	for _, h := range merklePath {
 		merklePathString += string(h[:]) + " "
 	}
-	jsonResp, err := json.Marshal(StoreFileResponse{string(hashroot), merklePathString, bytesToEntry(_getHash(uuid))})
+	jsonResp, err := json.Marshal(StoreFileResponse{string(hashroot), merklePathString, uuid, bytesToEntry(_getHash(uuid))})
     if err != nil {
         panic(err)
     }
