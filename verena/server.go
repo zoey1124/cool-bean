@@ -94,6 +94,7 @@ type LoadFileRequest struct {
 type LoadFileResponse struct {
 	Hashroot string `json:"hashRoot"`
 	Content string `json:"content"`
+	Entry Entry `json:"entry"`
 }
 
 type StoreFileRequest struct {
@@ -106,6 +107,7 @@ type StoreFileRequest struct {
 type StoreFileResponse struct {
 	Hashroot string `json:"hashRoot"`
 	MerklePath string `json:"merklePath"`
+	Entry Entry `json:"entry"`
 }
 
 type FileObject struct {
@@ -118,6 +120,10 @@ type Entry struct {
 	Hash      string `json:"hash"`
 	Version   int    `json:"version"`
 	PublicKey string `json:"publicKey"`
+}
+
+type GetRequest struct {
+	UUID userlib.UUID `json:"uuid"`
 }
 
 type PutRequest struct {
@@ -151,7 +157,7 @@ func storeFile(w http.ResponseWriter, req *http.Request) {
 	for _, h := range merklePath {
 		merklePathString += string(h[:]) + " "
 	}
-	jsonResp, err := json.Marshal(StoreFileResponse{string(hashroot), merklePathString})
+	jsonResp, err := json.Marshal(StoreFileResponse{string(hashroot), merklePathString, bytesToEntry(_getHash(uuid))})
     if err != nil {
         panic(err)
     }
@@ -207,33 +213,6 @@ func _storeFile(username string, filename string, content string) (userlib.UUID,
 	return UUID, roothash, merklePath, nil
 }
 
-func writeHash(UUID userlib.UUID, entry Entry, oldEntry Entry) {
-	/*
-		Forward old entry and new entry to Hash Server
-	*/
-	data, err := json.Marshal(PutRequest{
-		UUID:     UUID,
-		Entry:    entry,
-		OldEntry: oldEntry,
-	})
-	if err != nil {
-		panic(err)
-	}
-	requestBody := bytes.NewBuffer(data)
-	resp, err := http.Post(
-		"http://localhost:8090/put",
-		"application/json",
-		requestBody,
-	)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-
-	fmt.Println(string(body[:]))
-}
-
 func loadFile(w http.ResponseWriter, req *http.Request) {
 	/*
 		Print hashroot and file content to client.
@@ -248,7 +227,7 @@ func loadFile(w http.ResponseWriter, req *http.Request) {
 		panic(err)
 	}
 
-	jsonResp, err := json.Marshal(LoadFileResponse{string(hashroot), file_content})
+	jsonResp, err := json.Marshal(LoadFileResponse{string(hashroot), file_content, bytesToEntry(_getHash(uuid))})
     if err != nil {
         panic(err)
     }
@@ -275,9 +254,91 @@ func appendFile(user *client.User, filename string, content []byte) {
 	user.AppendToFile(filename, content)
 }
 
+func getHash(w http.ResponseWriter, req *http.Request) {
+	var jsonData GetRequest
+	err := json.NewDecoder(req.Body).Decode(&jsonData)
+	if err != nil {
+		panic(err)
+	}
+	resp := _getHash(jsonData.UUID)
+	w.Write(resp)
+	fmt.Println(resp)
+}
+
+func _getHash(uuid userlib.UUID) []byte {
+	data, err := json.Marshal(GetRequest{uuid})
+	if err != nil {
+		panic(err)
+	}
+	resp, err := http.Post(
+		"http://localhost:8090/get",
+		"application/json",
+		bytes.NewBuffer(data),
+	)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	return body
+}
+
+func writeHash(w http.ResponseWriter, req *http.Request) {
+	var jsonData PutRequest
+	err := json.NewDecoder(req.Body).Decode(&jsonData)
+	if err != nil {
+		panic(err)
+	}
+	resp := _writeHash(jsonData.UUID, jsonData.Entry, jsonData.OldEntry)
+	w.Write(resp)
+}
+
+func _writeHash(UUID userlib.UUID, entry Entry, oldEntry Entry) []byte {
+	/*
+		Forward old entry and new entry to Hash Server
+	*/
+	data, err := json.Marshal(PutRequest{
+		UUID:     UUID,
+		Entry:    entry,
+		OldEntry: oldEntry,
+	})
+	if err != nil {
+		panic(err)
+	}
+	requestBody := bytes.NewBuffer(data)
+	resp, err := http.Post(
+		"http://localhost:8090/put",
+		"application/json",
+		requestBody,
+	)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	return body
+}
+
+func bytesToEntry(entryBytes []byte) Entry {
+	var entry Entry
+	err := json.Unmarshal(entryBytes, &entry)
+	if err != nil {
+		panic(err)
+	}
+	return entry
+}
+
 func main() {
 	http.HandleFunc("/loadFile", loadFile)
 	http.HandleFunc("/storeFile", storeFile)
+	http.HandleFunc("/getHash", getHash)
+	http.HandleFunc("/writeHash", writeHash)
 
 	http.ListenAndServe(":8091", nil)
 	/*
