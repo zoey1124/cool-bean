@@ -43,7 +43,7 @@ class Entry:
 def load_file(filename):
     r = requests.get("http://localhost:8091/loadFile", json={"username":USERNAME, "password":PASSWORD, "filename":filename})
     response = LoadFileResponse(r.text)
-    print("hash root:", response.hash_root)
+    print("hash root:", response.hash_root.decode("utf-8"))
     print("content:", response.content)
     print("entry:", response.entry)
 
@@ -51,11 +51,13 @@ def load_file(filename):
         print("WARNING: supplied root hash does not match hash server:")
         print(f"    provided from server:      {response.hash_root}")
         print(f"    provided from hash server: {response.entry.hash})")
+    else:
+        print("hash verification passed: file is fresh")
 
 def store_file(filename, content):
     r = requests.put("http://localhost:8091/storeFile", json={"username":USERNAME, "password":PASSWORD, "filename":filename, "content":content})
     response = StoreFileResponse(r.text)
-    print("hash root:", response.hash_root)
+    print("hash root:", response.hash_root.decode("utf-8"))
     print("merkle path:", response.merkle_path)
     print("old entry:", response.old_entry)
 
@@ -86,6 +88,8 @@ def store_file(filename, content):
 
 def test_hash_server():
     test_uuid = str(uuid.uuid4())
+    print("randomly generated uuid:", test_uuid)
+    print()
 
     print("testing put (no old version)")
     r = requests.post(
@@ -94,11 +98,13 @@ def test_hash_server():
             "uuid": test_uuid,
             "entry":{"hash":"a", "version":1, "publicKey":USERNAME},
         })
-    print(r.text)
+    print("response from hash server:", r.text)
+    print()
 
     print("testing get")
     r = requests.get("http://localhost:8090/get", json={"uuid": test_uuid})
-    print(r.text)
+    print("response from hash server:", r.text)
+    print()
 
     print("testing put (updating version)")
     r = requests.post(
@@ -108,21 +114,38 @@ def test_hash_server():
             "entry":{"hash":"c", "version":2, "publicKey":USERNAME},
             "oldEntry":{"hash":"a", "version":1, "publicKey":USERNAME},
         })
-    print(r.text)
+    print("response from hash server:", r.text)
+    print()
 
     print("testing get (after update)")
     r = requests.get("http://localhost:8090/get", json={"uuid": test_uuid})
-    print(r.text)
+    print("response from hash server:", r.text)
+    print()
 
 if __name__ == "__main__":
-    print("server test")
-    print()
-    print("store file:")
-    store_file("test", "content")
-    print()
-    print("load file:")
-    load_file("test")
+    while True:
+        command = input("> enter a command: ")
 
-    # print()
-    # print("hash server test")
-    # test_hash_server()
+        if command in ["q", "quit"]:
+            print("bye")
+            break
+
+        print()
+        inputs = command.split(" ")
+        if inputs[0] == "store":
+            print("store file:")
+            store_file(inputs[1], inputs[2])
+            print()
+            continue
+        if inputs[0] == "load":
+            print("load file:")
+            load_file(inputs[1])
+            print()
+            continue
+        if inputs[0] == "test":
+            print("hash server test")
+            test_hash_server()
+            print()
+            continue
+        print("unrecognized command")
+        print()
