@@ -92,7 +92,7 @@ type LoadFileRequest struct {
 }
 
 type LoadFileResponse struct {
-	Hashroot string `json:"hashRoot"`
+	RootHash []byte `json:"rootHash"`
 	Content string `json:"content"`
 	Entry Entry `json:"entry"`
 }
@@ -105,8 +105,8 @@ type StoreFileRequest struct {
 }
 
 type StoreFileResponse struct {
-	Hashroot string `json:"hashRoot"`
-	MerklePath string `json:"merklePath"`
+	RootHash []byte `json:"rootHash"`
+	MerklePath [][]byte `json:"merklePath"`
 	UUID userlib.UUID `json:"uuid"`
 	OldEntry Entry `json:"oldEntry"`
 }
@@ -150,7 +150,7 @@ func storeFile(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	uuid, hashroot, merklePath, err := _storeFile(jsonData.Username, jsonData.Filename, jsonData.Content)
+	uuid, rootHash, merklePath, err := _storeFile(jsonData.Username, jsonData.Filename, jsonData.Content)
 	if err != nil {
 		panic(err)
 	}
@@ -158,7 +158,9 @@ func storeFile(w http.ResponseWriter, req *http.Request) {
 	for _, h := range merklePath {
 		merklePathString += string(h[:]) + " "
 	}
-	jsonResp, err := json.Marshal(StoreFileResponse{string(hashroot), merklePathString, uuid, bytesToEntry(_getHash(uuid))})
+	fmt.Println(rootHash)
+	fmt.Println(merklePath)
+	jsonResp, err := json.Marshal(StoreFileResponse{rootHash, merklePath, uuid, bytesToEntry(_getHash(uuid))})
     if err != nil {
         panic(err)
     }
@@ -216,19 +218,19 @@ func _storeFile(username string, filename string, content string) (userlib.UUID,
 
 func loadFile(w http.ResponseWriter, req *http.Request) {
 	/*
-		Print hashroot and file content to client.
+		Print rootHash and file content to client.
 	*/
 	var jsonData LoadFileRequest
 	err := json.NewDecoder(req.Body).Decode(&jsonData)
 	if err != nil {
 		panic(err)
 	}
-	uuid, hashroot, file_content, err := _loadFile(jsonData.Username, jsonData.Filename)
+	uuid, rootHash, file_content, err := _loadFile(jsonData.Username, jsonData.Filename)
 	if err != nil {
 		panic(err)
 	}
 
-	jsonResp, err := json.Marshal(LoadFileResponse{string(hashroot), file_content, bytesToEntry(_getHash(uuid))})
+	jsonResp, err := json.Marshal(LoadFileResponse{rootHash, file_content, bytesToEntry(_getHash(uuid))})
     if err != nil {
         panic(err)
     }
@@ -237,18 +239,18 @@ func loadFile(w http.ResponseWriter, req *http.Request) {
 }
 
 func _loadFile(username string, filename string) (userlib.UUID, []byte, string, error) {
-	// Return: hashroot, file_content
+	// Return: rootHash, file_content
 	// 1. get UUID from username and filename
 	UUID, err := GetUUID(username, filename)
 	if err != nil {
 		return UUID, nil, "", err
 	}
-	// 2. get hashroot and content
+	// 2. get rootHash and content
 	var fileObject FileObject
 	fileObject = datastore[UUID]
-	hashroot := fileObject.MerkleTree.MerkleRoot()
+	rootHash := fileObject.MerkleTree.MerkleRoot()
 	plaintext := fileObject.Plaintext
-	return UUID, hashroot, plaintext, nil
+	return UUID, rootHash, plaintext, nil
 }
 
 func appendFile(user *client.User, filename string, content []byte) {
