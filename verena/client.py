@@ -12,6 +12,7 @@ class StoreFileResponse:
         response_json = json.loads(response_text)
         self.root_hash = base64.b64decode(response_json["rootHash"])
         self.merkle_path = [base64.b64decode(node) for node in response_json["merklePath"]]
+        self.indexes = response_json["indexes"]
         self.uuid = response_json["uuid"]
         self.old_entry = Entry(response_json["oldEntry"])
 
@@ -51,7 +52,7 @@ def load_file(filename):
     if response.root_hash != response.entry.hash:
         print("WARNING: supplied root hash does not match hash server:")
         print(f"    provided from server:      {response.root_hash}")
-        print(f"    provided from hash server: {response.entry.hash})")
+        print(f"    provided from hash server: {response.entry.hash}")
     else:
         print("hash verification passed: file is fresh")
 
@@ -68,14 +69,17 @@ def store_file(filename, content):
     file_hash = sha256(bytearray(content, "utf-8"))
     print("file hash:", list(file_hash.digest()))
     root_hash = response.root_hash
-    for sibling_hash in response.merkle_path:
-        file_hash = sha256(file_hash.digest() + sibling_hash)
+    for sibling_hash, index in zip(response.merkle_path, response.indexes):
+        if index:
+            concat_bytes = file_hash.digest() + sibling_hash
+        else:
+            concat_bytes = sibling_hash + file_hash.digest()
+        file_hash = sha256(concat_bytes)
     if file_hash.digest() != root_hash:
-        # failed to verify inclusion proof; bail
         print("hash verification failed")
         print("computed root:", list(file_hash.digest()))
         print("received root:", list(root_hash))
-        # return
+        return
 
     # ask server to ask hash server to write a new entry
     print("verification succeeded: asking server to write new entry")
@@ -93,7 +97,7 @@ def test_hash_server():
     test_uuid = str(uuid.uuid4())
     test_hash = base64.b64encode(sha256(bytes("content", "utf-8")).digest()).decode()
     print("randomly generated uuid:", test_uuid)
-    print("randomly generated hash:", test_hash)
+    print("test hash:", test_hash)
     print()
 
     print("testing put (no old version)")
