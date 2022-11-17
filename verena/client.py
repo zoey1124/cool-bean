@@ -44,8 +44,8 @@ class Entry:
 def load_file(filename):
     r = requests.get("http://localhost:8091/loadFile", json={"username":USERNAME, "password":PASSWORD, "filename":filename})
     response = LoadFileResponse(r.text)
-    print("root hash:", base64.b64encode(response.root_hash).decode())
     print("content:", response.content)
+    print("root hash:", base64.b64encode(response.root_hash).decode())
     print("entry:", response.entry)
 
     if response.root_hash != response.entry.hash:
