@@ -47,6 +47,7 @@ def load_file(filename):
     response = LoadFileResponse(r.text)
     print("content:", response.content)
     print("root hash:", base64.b64encode(response.root_hash).decode())
+    # TODO: we need to implement signing to verify this entry is in fact coming from the hash server
     print("entry:", response.entry)
 
     if response.root_hash != response.entry.hash:
@@ -83,7 +84,7 @@ def store_file(filename, content):
 
     # ask server to ask hash server to write a new entry
     print("verification succeeded: asking server to write new entry")
-    requests.post("http://localhost:8090/put", json={
+    requests.post("http://localhost:8091/writeHash", json={
         "uuid": str(response.uuid),
         "entry": {
             "hash": base64.b64encode(root_hash).decode(),
