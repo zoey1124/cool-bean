@@ -3,6 +3,7 @@ from hashlib import sha256
 import json
 import requests
 import uuid
+import time
 
 USERNAME = "Alice"
 PASSWORD = "12345"
@@ -132,30 +133,24 @@ def test_hash_server():
     print("response from hash server:", r.text)
     print()
 
+def one_store_load(filename, file_content):
+    store_file(filename, file_content)
+    load_file(filename)
+    return
+
 if __name__ == "__main__":
-    while True:
-        command = input("> enter a command: ")
+    # do 10 experiments, every experiment 100 store + load
+    total_time_data = []
+    for i in range(10):
+        filename = "somefile{}.txt".format(i)
+        file_content = "This is a file content"
+        start_time = time.time()
+        for j in range(100): 
+            file_content += str(j)
+            one_store_load(filename, file_content)
 
-        if command in ["q", "quit"]:
-            print("bye")
-            break
-
-        print()
-        inputs = command.split(" ")
-        if inputs[0] == "store":
-            print("store file:")
-            store_file(inputs[1], inputs[2])
-            print()
-            continue
-        if inputs[0] == "load":
-            print("load file:")
-            load_file(inputs[1])
-            print()
-            continue
-        if inputs[0] == "test":
-            print("hash server test")
-            test_hash_server()
-            print()
-            continue
-        print("unrecognized command")
-        print()
+        time_used = time.time() - start_time
+        total_time_data.append(time_used)
+    print("time data collected is {}".format(total_time_data))
+    ave_time = sum(total_time_data) / (10)
+    print("average time for 100 load + store is {}".format(ave_time))
