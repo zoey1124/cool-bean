@@ -140,17 +140,35 @@ def one_store_load(filename, file_content):
 
 if __name__ == "__main__":
     # do 10 experiments, every experiment 100 store + load
-    total_time_data = []
-    for i in range(10):
+    total_store_time_data = []
+    total_load_time_data = []
+
+    # store
+    for i in range(1):
         filename = "somefile{}.txt".format(i)
         file_content = "This is a file content"
         start_time = time.time()
         for j in range(100): 
             file_content += str(j)
-            one_store_load(filename, file_content)
+            store_file(filename, file_content)
 
         time_used = time.time() - start_time
-        total_time_data.append(time_used)
-    print("time data collected is {}".format(total_time_data))
-    ave_time = sum(total_time_data) / (10)
-    print("average time for 100 load + store is {}".format(ave_time))
+        total_store_time_data.append(time_used)
+    print("time data collected is {}".format(total_store_time_data))
+    ave_time = sum(total_store_time_data) / (10)
+    print("average time for 100 store is {}".format(ave_time))
+
+
+
+    # load
+    for i in range(10):
+        filename = "somefile{}.txt".format(i)
+        start_time = time.time()
+        for j in range(100): 
+            load_file(filename)
+
+        time_used = time.time() - start_time
+        total_load_time_data.append(time_used)
+    print("time data collected is {}".format(total_load_time_data))
+    ave_time = sum(total_load_time_data) / (10)
+    print("average time for 100 load is {}".format(ave_time))
