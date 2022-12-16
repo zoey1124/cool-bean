@@ -13,7 +13,7 @@ go run hashServer.go
 
 Alternatively, you can spin up a [distributed version of the hash server](https://github.com/nivkris/dtrust/blob/dev/hashserver/core-modules/hash_server/README.md) (refer to the README for instructions and an architectural overview).
 
-Either will start an http server (listening on port 8091) that listens for get and put requests to the hash server.
+Either will start an http server (listening on port 8090) that listens for get and put requests to the hash server.
 
 ## Start the client:
 In a separate terminal:
